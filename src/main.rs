@@ -6,15 +6,27 @@ use std::process::{Command, Stdio};
 use std::time::Instant;
 use std::sync::mpsc;
 
-// Словарь без " и \ (92 символа)
 const CHARSET: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&'()*+,-./:;<=>?@[]^_`{|}~";
 const CHARSET_LEN: usize = CHARSET.len();
 const LIMIT: usize = (256 / CHARSET_LEN) * CHARSET_LEN;
 const CHARSET_FAST: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-";
-const CHUNK_SIZE: u64 = 5000;
+const CHUNK_SIZE: u64 = 10000; // Увеличили размер пачки
 
 #[derive(PartialEq, Clone, Copy)]
 enum OutputFormat { Plain, Json, Csv }
+
+// Быстрая конвертация числа без аллокаций
+fn fast_write_u64(buf: &mut Vec<u8>, mut n: u64) {
+    if n == 0 { buf.push(b'0'); return; }
+    let mut temp = [0u8; 20];
+    let mut i = 20;
+    while n > 0 {
+        i -= 1;
+        temp[i] = b'0' + (n % 10) as u8;
+        n /= 10;
+    }
+    buf.extend_from_slice(&temp[i..]);
+}
 
 fn main() -> io::Result<()> {
     let args: Vec<String> = std::env::args().collect();
@@ -26,11 +38,13 @@ fn main() -> io::Result<()> {
     if count == 0 { return Ok(()); }
 
     let start_time = if show_stats { Some(Instant::now()) } else { None };
-    let (tx, rx) = mpsc::sync_channel::<Vec<u8>>(128);
+    // Увеличили очередь канала до 256, чтобы ядра не ждали
+    let (tx, rx) = mpsc::sync_channel::<Vec<u8>>(256);
 
     let writer_thread = std::thread::spawn(move || -> io::Result<()> {
+        // УСТАНОВИЛИ БУФЕР 32 МБ ДЛЯ ЩАДЯЩЕГО РЕЖИМА SSD
         let mut out: Box<dyn Write> = if let Some(path) = out_file {
-            Box::new(BufWriter::with_capacity(1024 * 1024, File::create(path)?))
+            Box::new(BufWriter::with_capacity(32 * 1024 * 1024, File::create(path)?))
         } else {
             Box::new(BufWriter::with_capacity(1024 * 1024, io::stdout()))
         };
@@ -58,21 +72,18 @@ fn main() -> io::Result<()> {
 
         for i in 0..current_chunk_size {
             let global_id = chunk_idx * CHUNK_SIZE + i + 1;
-            
-            // Быстрая запись метаданных без макроса format!
             match format {
                 OutputFormat::Json => {
                     local_buf.extend_from_slice(b"{\"id\":");
-                    local_buf.extend_from_slice(global_id.to_string().as_bytes());
+                    fast_write_u64(&mut local_buf, global_id);
                     local_buf.extend_from_slice(b",\"pass\":\"");
                 },
                 OutputFormat::Csv => {
-                    local_buf.extend_from_slice(global_id.to_string().as_bytes());
+                    fast_write_u64(&mut local_buf, global_id);
                     local_buf.extend_from_slice(b",\"");
                 },
                 _ => {}
             }
-
             for _ in 0..length {
                 loop {
                     if rnd_pos >= rnd_buf.len() { let _ = fill(&mut rnd_buf); rnd_pos = 0; }
@@ -87,9 +98,11 @@ fn main() -> io::Result<()> {
                     }
                 }
             }
-
             match format {
-                OutputFormat::Json => local_buf.extend_from_slice(b"\"}\n"),
+                OutputFormat::Json => {
+                    local_buf.extend_from_slice(b"\"}");
+                    if global_id < count { local_buf.extend_from_slice(b",\n"); }
+                },
                 OutputFormat::Csv => local_buf.extend_from_slice(b"\"\n"),
                 _ => local_buf.push(b'\n'),
             }
@@ -151,15 +164,11 @@ fn print_report(start: Instant, count: u64, length: usize) {
         let mib_s = (bytes as f64 / 1048576.0) / dur;
         let p_s = count as f64 / dur;
 
-        // Функция для добавления пробелов в числа (1000000 -> 1 000 000)
         fn format_number(n: u64) -> String {
             let s = n.to_string();
-            s.as_bytes()
-                .rchunks(3)
-                .rev()
+            s.as_bytes().rchunks(3).rev()
                 .map(|chunk| std::str::from_utf8(chunk).unwrap())
-                .collect::<Vec<_>>()
-                .join(" ")
+                .collect::<Vec<_>>().join(" ")
         }
 
         eprintln!("\n--- СТАТИСТИКА ---");
