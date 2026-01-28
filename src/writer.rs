@@ -18,7 +18,6 @@ pub fn start_writer(rx: Receiver<Vec<u8>>, out_file: Option<String>, format: Out
         _ => {}
     }
 
-    let mut first = true;
     for received in rx {
         out.write_all(&received)?;
     }
