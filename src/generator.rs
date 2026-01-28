@@ -1,8 +1,7 @@
-use getrandom::fill;
-use std::process::{Command, Stdio};
-use std::io::Write;
-use std::time::Instant;
+use crate::words::WORDLIST;
 use crate::i18n::I18n;
+use getrandom::fill;
+use std::time::Instant;
 
 pub const CHARSET: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&'()*+,-./:;<=>?@[]^_`{|}~";
 pub const CHARSET_LEN: usize = CHARSET.len();
@@ -21,23 +20,50 @@ pub fn fast_write_u64(buf: &mut Vec<u8>, mut n: u64) {
     buf.extend_from_slice(&temp[i..]);
 }
 
-pub fn copy_to_clipboard(length: usize, fast_mode: bool) {
-    let mut pwd = String::new();
-    let mut rb = vec![0u8; length * 4];
-    let _ = fill(&mut rb);
-    let mut p = 0;
-    for _ in 0..length {
-        loop {
-            if p >= rb.len() { let _ = fill(&mut rb); p = 0; }
-            let v = rb[p] as usize; p += 1;
-            if fast_mode { pwd.push(CHARSET_FAST[v & 63] as char); break; }
-            else if v < LIMIT { pwd.push(CHARSET[v % CHARSET_LEN] as char); break; }
+pub fn get_random_word(rnd_buf: &mut [u8], rnd_pos: &mut usize) -> &'static str {
+    if *rnd_pos + 1 >= rnd_buf.len() {
+        let _ = fill(rnd_buf);
+        *rnd_pos = 0;
+    }
+    let idx = ((rnd_buf[*rnd_pos] as usize) << 8 | (rnd_buf[*rnd_pos + 1] as usize)) % WORDLIST.len();
+    *rnd_pos += 2;
+    WORDLIST[idx]
+}
+
+pub fn copy_to_clipboard(pwd: &str) {
+    use std::process::{Command, Stdio};
+    use std::io::Write;
+
+    let mut child = match Command::new("wl-copy")
+        .stdin(Stdio::piped())
+        .arg("-n")
+        .spawn() {
+        Ok(child) => child,
+        Err(e) => {
+            eprintln!("Ошибка запуска wl-copy: {}", e);
+            return;
+        }
+    };
+
+    if let Some(mut stdin) = child.stdin.take() {
+        if let Err(e) = stdin.write_all(pwd.as_bytes()) {
+            eprintln!("Ошибка записи в wl-copy: {}", e);
+            return;
         }
     }
-    let _ = Command::new("wl-copy").stdin(Stdio::piped()).spawn().map(|mut c| {
-        if let Some(mut si) = c.stdin.take() { let _ = si.write_all(pwd.as_bytes()); }
-        let _ = c.wait();
-    });
+    
+    match child.wait() {
+        Ok(status) => {
+            if status.success() {
+                println!("✓ Скопировано в буфер обмена");
+            } else {
+                eprintln!("✗ wl-copy завершился с ошибкой");
+            }
+        }
+        Err(e) => {
+            eprintln!("✗ Ошибка ожидания wl-copy: {}", e);
+        }
+    }
 }
 
 pub fn print_report(start: Instant, count: u64, length: usize, l: &I18n) {
@@ -46,18 +72,9 @@ pub fn print_report(start: Instant, count: u64, length: usize, l: &I18n) {
         let bytes = count * (length as u64 + 1);
         let mib_s = (bytes as f64 / 1048576.0) / dur;
         let p_s = count as f64 / dur;
-
-        fn format_number(n: u64) -> String {
-            let s = n.to_string();
-            s.as_bytes().rchunks(3).rev()
-                .map(|chunk| std::str::from_utf8(chunk).unwrap())
-                .collect::<Vec<_>>().join(" ")
-        }
-
-        eprintln!("\n--- {} ---", l.stat_title);
-        eprintln!("{:<20} {:.3} сек", l.stat_time, dur);
-        eprintln!("{:<20} {:.2} MiB/s", l.stat_speed, mib_s);
-        eprintln!("{:<20} {} пар/сек", l.stat_perf, format_number(p_s as u64));
-        eprintln!("------------------");
+        println!("\n--- {} ---", l.stat_title);
+        println!("{}: {:.4}s", l.stat_time, dur);
+        println!("{}: {:.2} MiB/s", l.stat_speed, mib_s);
+        println!("{}: {:.0} p/s", l.stat_perf, p_s);
     }
 }

@@ -14,7 +14,7 @@ pub fn start_writer(rx: Receiver<Vec<u8>>, out_file: Option<String>, format: Out
 
     match format {
         OutputFormat::Csv => writeln!(out, "id,password")?,
-        OutputFormat::Json => write!(out, "[\n")?,
+        OutputFormat::Json => write!(out, "[")?,
         _ => {}
     }
 
