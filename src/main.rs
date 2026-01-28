@@ -148,8 +148,25 @@ fn print_report(start: Instant, count: u64, length: usize) {
     let dur = start.elapsed().as_secs_f64();
     if dur > 0.0 {
         let bytes = count * (length as u64 + 1);
-        eprintln!("\n--- СТАТИСТИКА ---\nСкорость: {:.2} MiB/s\nПаролей/сек: {:.0}\n------------------", 
-            bytes as f64 / 1048576.0 / dur, count as f64 / dur);
+        let mib_s = (bytes as f64 / 1048576.0) / dur;
+        let p_s = count as f64 / dur;
+
+        // Функция для добавления пробелов в числа (1000000 -> 1 000 000)
+        fn format_number(n: u64) -> String {
+            let s = n.to_string();
+            s.as_bytes()
+                .rchunks(3)
+                .rev()
+                .map(|chunk| std::str::from_utf8(chunk).unwrap())
+                .collect::<Vec<_>>()
+                .join(" ")
+        }
+
+        eprintln!("\n--- СТАТИСТИКА ---");
+        eprintln!("Время выполнения:    {:.3} сек", dur);
+        eprintln!("Скорость потока:     {:.2} MiB/s", mib_s);
+        eprintln!("Производительность:  {} пар/сек", format_number(p_s as u64));
+        eprintln!("------------------");
     }
 }
 
