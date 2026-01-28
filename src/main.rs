@@ -11,8 +11,10 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 const APP_NAME: &str = "PASSWG";
-const VERSION: &str = "2.1.0"; 
-const CHUNK_SIZE: u64 = 1024; // 1024 пароля ~ 32KB (L1 Cache size)
+const VERSION: &str = "2.2.0"; 
+
+// Целевой размер данных в одном чанке — 32 КБ (чтобы влезло в L1d любого ядра)
+const TARGET_L1_SIZE: usize = 64 * 1024;
 
 fn main() -> std::io::Result<()> {
     let locale = i18n::get_locale();
@@ -26,13 +28,16 @@ fn main() -> std::io::Result<()> {
     let config = args::parse_args(&raw_args);
     if config.count == 0 { return Ok(()); }
 
+    // АВТОКОРРЕКЦИЯ: Вычисляем размер чанка на лету
+    // Примерный размер одного пароля: длина + ID (до 20) + разделители
+    let bytes_per_pass = config.length + 30;
+    let chunk_size = (TARGET_L1_SIZE / bytes_per_pass).clamp(500, 2000) as u64;
+
     let start_time = if config.show_stats { Some(Instant::now()) } else { None };
 
-    // Получаем писатель из модуля writer
     let out = writer::get_writer(&config.out_file)?;
     let out_arc = Arc::new(Mutex::new(out));
 
-    // Заголовок
     {
         let mut out_lock = out_arc.lock().unwrap();
         match config.format {
@@ -42,15 +47,15 @@ fn main() -> std::io::Result<()> {
         }
     }
 
-    let num_chunks = (config.count + CHUNK_SIZE - 1) / CHUNK_SIZE;
+    let num_chunks = (config.count + chunk_size - 1) / chunk_size;
     let first_password = Arc::new(Mutex::new(None));
 
     (0..num_chunks).into_par_iter().for_each(|chunk_idx| {
-        let start_id = chunk_idx * CHUNK_SIZE + 1;
+        let start_id = chunk_idx * chunk_size + 1;
         let size = if chunk_idx == num_chunks - 1 {
-            config.count - chunk_idx * CHUNK_SIZE
+            config.count - chunk_idx * chunk_size
         } else {
-            CHUNK_SIZE
+            chunk_size
         };
 
         let data = generator::generate_chunk(
@@ -70,7 +75,6 @@ fn main() -> std::io::Result<()> {
         let _ = out_lock.write_all(&data);
     });
 
-    // Финал
     {
         let mut out_lock = out_arc.lock().unwrap();
         if config.format == OutputFormat::Json { write!(out_lock, "\n]")?; }

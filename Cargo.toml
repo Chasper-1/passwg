@@ -1,12 +1,14 @@
 [package]
 name = "passwg"
-version = "1.4.0"
+version = "1.6.10"
 edition = "2024"
 
 [dependencies]
 arboard = "3.6.1"
 getrandom = "0.3.4"
 itoa = "1.0.17"
+rand_chacha = "0.9.0"
+rand_core = "0.9.5"
 rayon = "1.11.0"
 
 [profile.release]

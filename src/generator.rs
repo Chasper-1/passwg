@@ -2,10 +2,13 @@ use crate::words::WORDLIST;
 use crate::i18n::I18n;
 use crate::writer::OutputFormat;
 use std::time::Instant;
+use rand_chacha::ChaCha8Rng;
+use rand_core::{RngCore, SeedableRng};
 
 pub const CHARSET: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&'()*+,-./:;<=>?@[]^_`{|}~";
-pub const CHARSET_LEN: usize = CHARSET.len();
+pub const CHARSET_LEN: usize = 92; 
 pub const CHARSET_FAST: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-";
+const CHARSET_LIMIT: u32 = (256 / CHARSET_LEN as u32) * CHARSET_LEN as u32;
 
 pub fn generate_chunk(
     start_id: u64,
@@ -15,83 +18,130 @@ pub fn generate_chunk(
     word_mode: bool,
     format: OutputFormat,
 ) -> Vec<u8> {
-    // Резервируем под L1 кэш (~32KB чанк при 1024 паролях)
-    let mut buf = Vec::with_capacity(size as usize * (length + 12));
+    let mut buf = Vec::with_capacity(size as usize * (length + 45));
     
-    // Сид один раз на поток
-    let mut seed = [0u8; 8];
+    let mut seed = [0u8; 32];
     let _ = getrandom::fill(&mut seed);
-    let mut state = u64::from_le_bytes(seed);
+    let mut rng = ChaCha8Rng::from_seed(seed);
 
-    for i in 0..size {
-        let current_id = start_id + i;
+    unsafe {
+        let ptr: *mut u8 = buf.as_mut_ptr();
+        let mut offset = 0;
 
-        match format {
-            OutputFormat::Csv => {
-                fast_write_u64(&mut buf, current_id);
-                buf.push(b',');
-            }
-            OutputFormat::Json => {
-                if current_id == 1 { buf.extend_from_slice(b"  \""); }
-                else { buf.extend_from_slice(b",\n  \""); }
-            }
-            _ => {}
-        }
+        for i in 0..size {
+            let current_id = start_id + i;
 
-        if word_mode {
-            for k in 0..length {
-                state = next_rand(&mut state);
-                let word_idx = (state as usize) % WORDLIST.len();
-                buf.extend_from_slice(WORDLIST[word_idx].as_bytes());
-                if k < length - 1 { buf.push(b'-'); }
+            match format {
+                OutputFormat::Csv => {
+                    offset += fast_write_u64_ptr(ptr.add(offset), current_id);
+                    *ptr.add(offset) = b',';
+                    offset += 1;
+                }
+                OutputFormat::Json => {
+                    let prefix: &[u8] = if current_id == 1 { b"  \"" } else { b",\n  \"" };
+                    std::ptr::copy_nonoverlapping(prefix.as_ptr(), ptr.add(offset), prefix.len());
+                    offset += prefix.len();
+                }
+                _ => {}
             }
-        } else {
-            for _ in 0..length {
-                state = next_rand(&mut state);
-                let b = (state >> 32) as u8;
-                if fast_mode {
-                    buf.push(CHARSET_FAST[(b & 63) as usize]);
-                } else {
-                    buf.push(CHARSET[(b as usize) % CHARSET_LEN]);
+
+            if word_mode {
+                for _ in 0..length {
+                    let idx = (rng.next_u32() as usize) % WORDLIST.len();
+                    let word = WORDLIST[idx];
+                    std::ptr::copy_nonoverlapping(word.as_ptr(), ptr.add(offset), word.len());
+                    offset += word.len();
+                    *ptr.add(offset) = b'-'; // Упростили логику тире для скорости
+                    offset += 1;
+                }
+                offset -= 1; // Убираем последнее тире
+            } else {
+                let target_charset = if fast_mode { CHARSET_FAST } else { CHARSET };
+                
+                // КЛЮЧЕВАЯ ОПТИМИЗАЦИЯ: читаем сразу 8 байт
+                let mut random_val = rng.next_u64();
+                let mut available_bytes = 8;
+
+                for _ in 0..length {
+                    if available_bytes == 0 {
+                        random_val = rng.next_u64();
+                        available_bytes = 8;
+                    }
+
+                    if fast_mode {
+                        *ptr.add(offset) = target_charset[(random_val & 63) as usize];
+                        random_val >>= 6;
+                        // В fast mode 64 бита хватает на 10 символов
+                        if (64 - (available_bytes * 6)) > 58 { available_bytes = 0; } 
+                    } else {
+                        let mut r = (random_val & 0xFF) as u32;
+                        if r >= CHARSET_LIMIT {
+                            loop {
+                                r = rng.next_u32() & 0xFF;
+                                if r < CHARSET_LIMIT { break; }
+                            }
+                        }
+                        *ptr.add(offset) = target_charset[r as usize % 92];
+                        random_val >>= 8;
+                        available_bytes -= 1;
+                    }
+                    offset += 1;
                 }
             }
-        }
 
-        if format == OutputFormat::Json { buf.push(b'\"'); }
-        else { buf.push(b'\n'); }
+            if format == OutputFormat::Json {
+                *ptr.add(offset) = b'\"';
+                offset += 1;
+            } else {
+                *ptr.add(offset) = b'\n';
+                offset += 1;
+            }
+        }
+        buf.set_len(offset);
     }
     buf
 }
 
 #[inline(always)]
-fn next_rand(state: &mut u64) -> u64 {
-    *state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
-    *state
-}
-
-pub fn fast_write_u64(buf: &mut Vec<u8>, mut n: u64) {
-    if n == 0 { buf.push(b'0'); return; }
+unsafe fn fast_write_u64_ptr(ptr: *mut u8, mut n: u64) -> usize {
+    if n == 0 { unsafe { *ptr = b'0'; } return 1; }
+    static TABLE: &[u8; 200] = b"0001020304050607080910111213141516171819\
+                                 2021222324252627282930313233343536373839\
+                                 4041424344454647484950515253545556575859\
+                                 6061626364656667686970717273747576777879\
+                                 8081828384858687888990919293949596979899";
     let mut temp = [0u8; 20];
     let mut i = 20;
-    while n > 0 {
-        i -= 1;
-        temp[i] = b'0' + (n % 10) as u8;
-        n /= 10;
+    while n >= 100 {
+        let tri = ((n % 100) * 2) as usize;
+        n /= 100;
+        i -= 2;
+        unsafe {
+            temp[i] = *TABLE.get_unchecked(tri);
+            temp[i + 1] = *TABLE.get_unchecked(tri + 1);
+        }
     }
-    buf.extend_from_slice(&temp[i..]);
+    if n < 10 {
+        i -= 1;
+        temp[i] = b'0' + n as u8;
+    } else {
+        let tri = (n * 2) as usize;
+        i -= 2;
+        unsafe {
+            temp[i] = *TABLE.get_unchecked(tri);
+            temp[i + 1] = *TABLE.get_unchecked(tri + 1);
+        }
+    }
+    let len = 20 - i;
+    unsafe { std::ptr::copy_nonoverlapping(temp.as_ptr().add(i), ptr, len); }
+    len
 }
 
 pub fn copy_to_clipboard(pwd: &str) {
     use std::process::{Command, Stdio};
     use std::io::Write;
-    let mut child = match Command::new("wl-copy").stdin(Stdio::piped()).arg("-n").spawn() {
-        Ok(c) => c,
-        Err(_) => return,
-    };
-    if let Some(mut stdin) = child.stdin.take() {
-        let _ = stdin.write_all(pwd.as_bytes());
-    }
-    let _ = child.wait();
+    let _ = Command::new("wl-copy").stdin(Stdio::piped()).arg("-n").spawn()
+        .and_then(|mut c| c.stdin.take().unwrap().write_all(pwd.as_bytes()));
 }
 
 pub fn print_report(start: Instant, count: u64, _length: usize, l: &I18n) {
@@ -101,7 +151,6 @@ pub fn print_report(start: Instant, count: u64, _length: usize, l: &I18n) {
         println!("\n--- {} ---", l.stat_title);
         println!("{}: {:.4} s", l.stat_time, dur);
         println!("{}: {:.2} p/s", l.stat_speed, speed);
-        // Используем то самое поле stat_perf, чтобы не было ворнингов
-        println!("{}: {:.2} MHz (approx)", l.stat_perf, speed / 1_000_000.0);
+        println!("{}: {:.2} Mp/s", l.stat_perf, speed / 1_000_000.0);
     }
 }
