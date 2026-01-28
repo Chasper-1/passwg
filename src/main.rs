@@ -14,7 +14,7 @@ const APP_NAME: &str = "PASSWG";
 const VERSION: &str = "2.2.0"; 
 
 // Целевой размер данных в одном чанке — 32 КБ (чтобы влезло в L1d любого ядра)
-const TARGET_L1_SIZE: usize = 64 * 1024;
+const TARGET_L1_SIZE: usize = 16 * 1024;
 
 fn main() -> std::io::Result<()> {
     let locale = i18n::get_locale();
@@ -30,8 +30,8 @@ fn main() -> std::io::Result<()> {
 
     // АВТОКОРРЕКЦИЯ: Вычисляем размер чанка на лету
     // Примерный размер одного пароля: длина + ID (до 20) + разделители
-    let bytes_per_pass = config.length + 30;
-    let chunk_size = (TARGET_L1_SIZE / bytes_per_pass).clamp(500, 2000) as u64;
+    let bytes_per_pass = config.length + 20;
+    let chunk_size = (TARGET_L1_SIZE / bytes_per_pass).clamp(32, 4096) as u64;
 
     let start_time = if config.show_stats { Some(Instant::now()) } else { None };
 

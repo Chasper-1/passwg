@@ -1,14 +1,17 @@
-use crate::words::WORDLIST;
+#![allow(dead_code)]
 use crate::i18n::I18n;
+use crate::words::WORDLIST;
 use crate::writer::OutputFormat;
-use std::time::Instant;
 use rand_chacha::ChaCha8Rng;
 use rand_core::{RngCore, SeedableRng};
+use std::time::Instant;
 
-pub const CHARSET: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&'()*+,-./:;<=>?@[]^_`{|}~";
-pub const CHARSET_LEN: usize = 92; 
+pub const CHARSET: &[u8] =
+    b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&'()*+,-./:;<=>?@[]^_`{|}~";
+pub const CHARSET_LEN: usize = 92;
 pub const CHARSET_FAST: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-";
-const CHARSET_LIMIT: u32 = (256 / CHARSET_LEN as u32) * CHARSET_LEN as u32;
+
+const CHARSET_LIMIT: u32 = (u32::MAX / CHARSET_LEN as u32) * CHARSET_LEN as u32;
 
 pub fn generate_chunk(
     start_id: u64,
@@ -18,8 +21,9 @@ pub fn generate_chunk(
     word_mode: bool,
     format: OutputFormat,
 ) -> Vec<u8> {
-    let mut buf = Vec::with_capacity(size as usize * (length + 45));
-    
+    // Резервируем память: длина пароля + макс. длина ID (20) + разделители
+    let mut buf = Vec::with_capacity(size as usize * (length + 32));
+
     let mut seed = [0u8; 32];
     let _ = getrandom::fill(&mut seed);
     let mut rng = ChaCha8Rng::from_seed(seed);
@@ -31,6 +35,7 @@ pub fn generate_chunk(
         for i in 0..size {
             let current_id = start_id + i;
 
+            // 1. ПРЕФИКСЫ ФОРМАТА
             match format {
                 OutputFormat::Csv => {
                     offset += fast_write_u64_ptr(ptr.add(offset), current_id);
@@ -45,50 +50,49 @@ pub fn generate_chunk(
                 _ => {}
             }
 
+            // 2. ГЕНЕРАЦИЯ КОНТЕНТА
             if word_mode {
-                for _ in 0..length {
-                    let idx = (rng.next_u32() as usize) % WORDLIST.len();
-                    let word = WORDLIST[idx];
+                for k in 0..length {
+                    let random_u32 = rng.next_u32();
+                    let idx = ((random_u32 as u64 * WORDLIST.len() as u64) >> 32) as usize;
+                    let word = *WORDLIST.get_unchecked(idx);
+                    
                     std::ptr::copy_nonoverlapping(word.as_ptr(), ptr.add(offset), word.len());
                     offset += word.len();
-                    *ptr.add(offset) = b'-'; // Упростили логику тире для скорости
+                    
+                    if k < length - 1 {
+                        *ptr.add(offset) = b'-';
+                        offset += 1;
+                    }
+                }
+            } else if fast_mode {
+                let mut random_val = rng.next_u64();
+                let mut bits = 64;
+                for _ in 0..length {
+                    if bits < 6 {
+                        random_val = rng.next_u64();
+                        bits = 64;
+                    }
+                    *ptr.add(offset) = *CHARSET_FAST.get_unchecked((random_val & 63) as usize);
+                    random_val >>= 6;
+                    bits -= 6;
                     offset += 1;
                 }
-                offset -= 1; // Убираем последнее тире
             } else {
-                let target_charset = if fast_mode { CHARSET_FAST } else { CHARSET };
-                
-                // КЛЮЧЕВАЯ ОПТИМИЗАЦИЯ: читаем сразу 8 байт
-                let mut random_val = rng.next_u64();
-                let mut available_bytes = 8;
-
                 for _ in 0..length {
-                    if available_bytes == 0 {
-                        random_val = rng.next_u64();
-                        available_bytes = 8;
-                    }
-
-                    if fast_mode {
-                        *ptr.add(offset) = target_charset[(random_val & 63) as usize];
-                        random_val >>= 6;
-                        // В fast mode 64 бита хватает на 10 символов
-                        if (64 - (available_bytes * 6)) > 58 { available_bytes = 0; } 
-                    } else {
-                        let mut r = (random_val & 0xFF) as u32;
-                        if r >= CHARSET_LIMIT {
-                            loop {
-                                r = rng.next_u32() & 0xFF;
-                                if r < CHARSET_LIMIT { break; }
-                            }
+                    let mut r = rng.next_u32();
+                    if r >= CHARSET_LIMIT {
+                        loop {
+                            r = rng.next_u32();
+                            if r < CHARSET_LIMIT { break; }
                         }
-                        *ptr.add(offset) = target_charset[r as usize % 92];
-                        random_val >>= 8;
-                        available_bytes -= 1;
                     }
+                    *ptr.add(offset) = *CHARSET.get_unchecked((r % CHARSET_LEN as u32) as usize);
                     offset += 1;
                 }
             }
 
+            // 3. ПОСТФИКСЫ
             if format == OutputFormat::Json {
                 *ptr.add(offset) = b'\"';
                 offset += 1;
@@ -102,45 +106,54 @@ pub fn generate_chunk(
     buf
 }
 
+/// Супер-быстрая запись u64 через таблицу предзаписанных пар цифр
 #[inline(always)]
 unsafe fn fast_write_u64_ptr(ptr: *mut u8, mut n: u64) -> usize {
-    if n == 0 { unsafe { *ptr = b'0'; } return 1; }
-    static TABLE: &[u8; 200] = b"0001020304050607080910111213141516171819\
-                                 2021222324252627282930313233343536373839\
-                                 4041424344454647484950515253545556575859\
-                                 6061626364656667686970717273747576777879\
-                                 8081828384858687888990919293949596979899";
+    static TABLE: &[u8] = b"0001020304050607080910111213141516171819\
+                            2021222324252627282930313233343536373839\
+                            4041424344454647484950515253545556575859\
+                            6061626364656667686970717273747576777879\
+                            8081828384858687888990919293949596979899";
+    if n == 0 {
+        unsafe { *ptr = b'0'; }
+        return 1;
+    }
     let mut temp = [0u8; 20];
     let mut i = 20;
     while n >= 100 {
-        let tri = ((n % 100) * 2) as usize;
+        let digit2 = ((n % 100) * 2) as usize;
         n /= 100;
         i -= 2;
         unsafe {
-            temp[i] = *TABLE.get_unchecked(tri);
-            temp[i + 1] = *TABLE.get_unchecked(tri + 1);
+            temp[i] = *TABLE.get_unchecked(digit2);
+            temp[i + 1] = *TABLE.get_unchecked(digit2 + 1);
         }
     }
     if n < 10 {
         i -= 1;
         temp[i] = b'0' + n as u8;
     } else {
-        let tri = (n * 2) as usize;
+        let digit2 = (n * 2) as usize;
         i -= 2;
         unsafe {
-            temp[i] = *TABLE.get_unchecked(tri);
-            temp[i + 1] = *TABLE.get_unchecked(tri + 1);
+            temp[i] = *TABLE.get_unchecked(digit2);
+            temp[i + 1] = *TABLE.get_unchecked(digit2 + 1);
         }
     }
     let len = 20 - i;
-    unsafe { std::ptr::copy_nonoverlapping(temp.as_ptr().add(i), ptr, len); }
+    unsafe {
+        std::ptr::copy_nonoverlapping(temp.as_ptr().add(i), ptr, len);
+    }
     len
 }
 
 pub fn copy_to_clipboard(pwd: &str) {
-    use std::process::{Command, Stdio};
     use std::io::Write;
-    let _ = Command::new("wl-copy").stdin(Stdio::piped()).arg("-n").spawn()
+    use std::process::{Command, Stdio};
+    let _ = Command::new("wl-copy")
+        .stdin(Stdio::piped())
+        .arg("-n")
+        .spawn()
         .and_then(|mut c| c.stdin.take().unwrap().write_all(pwd.as_bytes()));
 }
 

@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 pub struct I18n {
     pub help_usage: &'static str,
     pub help_args: &'static str,
