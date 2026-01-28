@@ -1,9 +1,10 @@
 [package]
 name = "passwg"
-version = "0.4.0"
+version = "0.5.1"
 edition = "2024"
 
 [dependencies]
+arboard = "3.6.1"
 getrandom = "0.3.4"
 rayon = "1.11.0"
 
