@@ -1,8 +1,8 @@
 use getrandom::fill;
 use rayon::prelude::*;
 use std::io::{self, Write};
+use std::process::{Command, Stdio}; // Добавили для работы с процессами
 use std::time::Instant;
-use arboard::Clipboard; // Не забудь про arboard = "3.4" в Cargo.toml
 
 const CHARSET: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
 const CHARSET_LEN: usize = CHARSET.len();
@@ -18,7 +18,7 @@ fn print_help() {
     println!("  длина         Длина пароля (по умолчанию 16)");
     println!("  количество    Сколько паролей создать (по умолчанию 1)");
     println!("\nФлаги:");
-    println!("  -c, --copy    Скопировать пароль в буфер обмена (только для 1 шт.)");
+    println!("  -c, --copy    Скопировать пароль через wl-copy (только для 1 шт.)");
     println!("  -s, --stats   Показать скорость и статистику (в stderr)");
     println!("  -f, --fast    Режим максимальной скорости (64 символа, без Bias)");
     println!("  -h, --help    Показать это окно");
@@ -37,7 +37,29 @@ fn main() -> io::Result<()> {
 
     let start_time = if show_stats { Some(Instant::now()) } else { None };
 
-    // Параллельная генерация
+    // Собираем пароль для копирования ПЕРЕД параллельной генерацией, если count == 1
+    let mut single_pwd = String::new();
+    if copy_mode && count == 1 {
+        let mut rb = vec![0u8; length * 4];
+        let _ = fill(&mut rb);
+        let mut p = 0;
+        for _ in 0..length {
+            loop {
+                if p >= rb.len() { let _ = fill(&mut rb); p = 0; }
+                let v = rb[p] as usize;
+                p += 1;
+                if fast_mode {
+                    single_pwd.push(CHARSET_FAST[v & 63] as char);
+                    break;
+                } else if v < LIMIT {
+                    single_pwd.push(CHARSET[v % CHARSET_LEN] as char);
+                    break;
+                }
+            }
+        }
+    }
+
+    // Параллельная генерация (как и была)
     let num_chunks = count / CHUNK_SIZE;
     let remainder = count % CHUNK_SIZE;
 
@@ -81,32 +103,22 @@ fn main() -> io::Result<()> {
         let _ = handle.write_all(&local_output);
     });
 
-    // Логика копирования (только если count == 1)
-    if copy_mode && count == 1 {
-        let mut pwd = String::with_capacity(length);
-        let mut rb = vec![0u8; length * 4]; // Запас для Rejection Sampling
-        let _ = fill(&mut rb);
-        let mut p = 0;
-        for _ in 0..length {
-            loop {
-                if p >= rb.len() {
-                    let _ = fill(&mut rb);
-                    p = 0;
+    // Логика копирования через wl-copy
+    if copy_mode && count == 1 && !single_pwd.is_empty() {
+        let child = Command::new("wl-copy")
+            .stdin(Stdio::piped())
+            .spawn();
+
+        match child {
+            Ok(mut process) => {
+                if let Some(mut stdin) = process.stdin.take() {
+                    let _ = stdin.write_all(single_pwd.as_bytes());
                 }
-                let v = rb[p] as usize;
-                p += 1;
-                if fast_mode {
-                    pwd.push(CHARSET_FAST[v & 63] as char);
-                    break;
-                } else if v < LIMIT {
-                    pwd.push(CHARSET[v % CHARSET_LEN] as char);
-                    break;
-                }
+                let _ = process.wait();
+                eprintln!("(Пароль скопирован в буфер обмена через wl-copy)");
             }
-        }
-        if let Ok(mut clipboard) = Clipboard::new() {
-            if clipboard.set_text(pwd).is_ok() {
-                eprintln!("(Пароль скопирован в буфер обмена)");
+            Err(_) => {
+                eprintln!("(Ошибка: не удалось запустить wl-copy. Проверь, установлен ли он?)");
             }
         }
     }
