@@ -161,9 +161,9 @@ pub fn print_report(start: Instant, count: u64, _length: usize, l: &I18n) {
     let dur = start.elapsed().as_secs_f64();
     if dur > 0.0 {
         let speed = count as f64 / dur;
-        println!("\n--- {} ---", l.stat_title);
-        println!("{}: {:.4} s", l.stat_time, dur);
-        println!("{}: {:.2} p/s", l.stat_speed, speed);
-        println!("{}: {:.2} Mp/s", l.stat_perf, speed / 1_000_000.0);
+        eprintln!("\n--- {} ---", l.stat_title);
+        eprintln!("{}: {:.4} s", l.stat_time, dur);
+        eprintln!("{}: {:.2} p/s", l.stat_speed, speed);
+        eprintln!("{}: {:.2} Mp/s", l.stat_perf, speed / 1_000_000.0);
     }
 }
