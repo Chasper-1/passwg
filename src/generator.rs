@@ -113,12 +113,55 @@ fn generate_internal<R: RngCore>(
                     }
                 }
             } else if fast_mode {
-                let mut random_val = rng.next_u64();
-                let mut bits = 64;
-                for _ in 0..length {
-                    if bits < 6 {
-                        random_val = rng.next_u64();
-                        bits = 64;
+                let mut current_len = length;
+
+                #[cfg(target_arch = "x86_64")]
+                if is_x86_feature_detected!("avx2") && current_len >= 32 {
+                    let chunks_32 = current_len / 32;
+                    let mut rand_buf = [0u8; 32];
+                    for _ in 0..chunks_32 {
+                        rng.fill_bytes(&mut rand_buf);
+                        // Убрал лишний unsafe внутри, так как мы уже в unsafe контексте
+                        crate::avx2::Avx2Mapper::map_64_symbols(rand_buf.as_ptr(), ptr.add(offset));
+                        offset += 32;
+                        current_len -= 32;
+                    }
+                }
+
+                if current_len >= 10 {
+                    let chunks_10 = current_len / 10;
+                    for _ in 0..chunks_10 {
+                        let r = rng.next_u64();
+                        *ptr.add(offset) = *CHARSET_FAST.get_unchecked((r & 63) as usize);
+                        *ptr.add(offset + 1) =
+                            *CHARSET_FAST.get_unchecked(((r >> 6) & 63) as usize);
+                        *ptr.add(offset + 2) =
+                            *CHARSET_FAST.get_unchecked(((r >> 12) & 63) as usize);
+                        *ptr.add(offset + 3) =
+                            *CHARSET_FAST.get_unchecked(((r >> 18) & 63) as usize);
+                        *ptr.add(offset + 4) =
+                            *CHARSET_FAST.get_unchecked(((r >> 24) & 63) as usize);
+                        *ptr.add(offset + 5) =
+                            *CHARSET_FAST.get_unchecked(((r >> 30) & 63) as usize);
+                        *ptr.add(offset + 6) =
+                            *CHARSET_FAST.get_unchecked(((r >> 36) & 63) as usize);
+                        *ptr.add(offset + 7) =
+                            *CHARSET_FAST.get_unchecked(((r >> 42) & 63) as usize);
+                        *ptr.add(offset + 8) =
+                            *CHARSET_FAST.get_unchecked(((r >> 48) & 63) as usize);
+                        *ptr.add(offset + 9) =
+                            *CHARSET_FAST.get_unchecked(((r >> 54) & 63) as usize);
+                        offset += 10;
+                        current_len -= 10;
+                    }
+                }
+
+                if current_len > 0 {
+                    let mut r = rng.next_u64();
+                    for _ in 0..current_len {
+                        *ptr.add(offset) = *CHARSET_FAST.get_unchecked((r & 63) as usize);
+                        r >>= 6;
+                        offset += 1;
                     }
                 }
             } else {
