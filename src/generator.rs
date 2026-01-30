@@ -29,9 +29,33 @@ pub fn generate_chunk(
     let _ = getrandom::fill(&mut seed);
 
     match rounds {
-        12 => generate_internal(ChaCha12Rng::from_seed(seed), start_id, size, length, fast_mode, word_mode, format),
-        20 => generate_internal(ChaCha20Rng::from_seed(seed), start_id, size, length, fast_mode, word_mode, format),
-        _  => generate_internal(ChaCha8Rng::from_seed(seed), start_id, size, length, fast_mode, word_mode, format),
+        12 => generate_internal(
+            ChaCha12Rng::from_seed(seed),
+            start_id,
+            size,
+            length,
+            fast_mode,
+            word_mode,
+            format,
+        ),
+        20 => generate_internal(
+            ChaCha20Rng::from_seed(seed),
+            start_id,
+            size,
+            length,
+            fast_mode,
+            word_mode,
+            format,
+        ),
+        _ => generate_internal(
+            ChaCha8Rng::from_seed(seed),
+            start_id,
+            size,
+            length,
+            fast_mode,
+            word_mode,
+            format,
+        ),
     }
 }
 
@@ -79,10 +103,10 @@ fn generate_internal<R: RngCore>(
                     // Умножение вместо деления по модулю для скорости и равномерности
                     let idx = ((random_u32 as u64 * WORDLIST.len() as u64) >> 32) as usize;
                     let word = *WORDLIST.get_unchecked(idx);
-                    
+
                     std::ptr::copy_nonoverlapping(word.as_ptr(), ptr.add(offset), word.len());
                     offset += word.len();
-                    
+
                     if k < length - 1 {
                         *ptr.add(offset) = b'-';
                         offset += 1;
@@ -96,11 +120,6 @@ fn generate_internal<R: RngCore>(
                         random_val = rng.next_u64();
                         bits = 64;
                     }
-                    // & 63 — это быстрый остаток от деления на 64
-                    *ptr.add(offset) = *CHARSET_FAST.get_unchecked((random_val & 63) as usize);
-                    random_val >>= 6;
-                    bits -= 6;
-                    offset += 1;
                 }
             } else {
                 for _ in 0..length {
@@ -109,7 +128,9 @@ fn generate_internal<R: RngCore>(
                     if r >= CHARSET_LIMIT {
                         loop {
                             r = rng.next_u32();
-                            if r < CHARSET_LIMIT { break; }
+                            if r < CHARSET_LIMIT {
+                                break;
+                            }
                         }
                     }
                     *ptr.add(offset) = *CHARSET.get_unchecked((r % CHARSET_LEN as u32) as usize);
@@ -140,7 +161,9 @@ unsafe fn fast_write_u64_ptr(ptr: *mut u8, mut n: u64) -> usize {
                             6061626364656667686970717273747576777879\
                             8081828384858687888990919293949596979899";
     if n == 0 {
-        unsafe { *ptr = b'0'; }
+        unsafe {
+            *ptr = b'0';
+        }
         return 1;
     }
     let mut temp = [0u8; 20];

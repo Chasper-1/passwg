@@ -3,6 +3,7 @@ mod generator;
 mod i18n;
 mod words;
 mod writer;
+mod avx2;
 
 use crate::writer::OutputFormat;
 use rayon::prelude::*;
