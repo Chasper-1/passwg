@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 const APP_NAME: &str = "PASSWG";
-const VERSION: &str = "2.2.0"; 
+const VERSION: &str = "2.2.0";
 
 // Целевой размер данных в одном чанке — 32 КБ (чтобы влезло в L1d любого ядра)
 const TARGET_L1_SIZE: usize = 16 * 1024;
@@ -26,14 +26,20 @@ fn main() -> std::io::Result<()> {
     }
 
     let config = args::parse_args(&raw_args);
-    if config.count == 0 { return Ok(()); }
+    if config.count == 0 {
+        return Ok(());
+    }
 
     // АВТОКОРРЕКЦИЯ: Вычисляем размер чанка на лету
     // Примерный размер одного пароля: длина + ID (до 20) + разделители
     let bytes_per_pass = config.length + 20;
     let chunk_size = (TARGET_L1_SIZE / bytes_per_pass).clamp(32, 4096) as u64;
 
-    let start_time = if config.show_stats { Some(Instant::now()) } else { None };
+    let start_time = if config.show_stats {
+        Some(Instant::now())
+    } else {
+        None
+    };
 
     let out = writer::get_writer(&config.out_file)?;
     let out_arc = Arc::new(Mutex::new(out));
@@ -59,15 +65,23 @@ fn main() -> std::io::Result<()> {
         };
 
         let data = generator::generate_chunk(
-            start_id, size, config.length, 
-            config.fast_mode, config.word_mode, config.format
+            start_id,
+            size,
+            config.length,
+            config.fast_mode,
+            config.word_mode,
+            config.format,
+            config.rounds
         );
 
         if config.copy_mode && start_id == 1 {
             let mut fp = first_password.lock().unwrap();
             if fp.is_none() {
                 let s = String::from_utf8_lossy(&data);
-                *fp = s.lines().next().map(|l| l.trim_matches(|c| c == ' ' || c == '"' || c == ',').to_string());
+                *fp = s.lines().next().map(|l| {
+                    l.trim_matches(|c| c == ' ' || c == '"' || c == ',')
+                        .to_string()
+                });
             }
         }
 
@@ -77,7 +91,9 @@ fn main() -> std::io::Result<()> {
 
     {
         let mut out_lock = out_arc.lock().unwrap();
-        if config.format == OutputFormat::Json { write!(out_lock, "\n]")?; }
+        if config.format == OutputFormat::Json {
+            write!(out_lock, "\n]")?;
+        }
         let _ = out_lock.flush();
     }
 
@@ -88,6 +104,6 @@ fn main() -> std::io::Result<()> {
     if let Some(start) = start_time {
         generator::print_report(start, config.count, config.length, locale);
     }
-    
+
     Ok(())
 }

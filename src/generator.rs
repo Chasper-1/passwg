@@ -2,7 +2,8 @@
 use crate::i18n::I18n;
 use crate::words::WORDLIST;
 use crate::writer::OutputFormat;
-use rand_chacha::ChaCha8Rng;
+// Импортируем все варианты ChaCha
+use rand_chacha::{ChaCha8Rng, ChaCha12Rng, ChaCha20Rng};
 use rand_core::{RngCore, SeedableRng};
 use std::time::Instant;
 
@@ -13,7 +14,32 @@ pub const CHARSET_FAST: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst
 
 const CHARSET_LIMIT: u32 = (u32::MAX / CHARSET_LEN as u32) * CHARSET_LEN as u32;
 
+/// Публичная точка входа. Выбирает алгоритм на основе rounds и вызывает generic-функцию.
 pub fn generate_chunk(
+    start_id: u64,
+    size: u64,
+    length: usize,
+    fast_mode: bool,
+    word_mode: bool,
+    format: OutputFormat,
+    rounds: u8, // Новый параметр
+) -> Vec<u8> {
+    let mut seed = [0u8; 32];
+    // Используем системную энтропию для инициализации
+    let _ = getrandom::fill(&mut seed);
+
+    match rounds {
+        12 => generate_internal(ChaCha12Rng::from_seed(seed), start_id, size, length, fast_mode, word_mode, format),
+        20 => generate_internal(ChaCha20Rng::from_seed(seed), start_id, size, length, fast_mode, word_mode, format),
+        _  => generate_internal(ChaCha8Rng::from_seed(seed), start_id, size, length, fast_mode, word_mode, format),
+    }
+}
+
+/// Внутренняя функция с логикой генерации.
+/// <R: RngCore> означает, что она принимает любой генератор (8, 12 или 20 раундов),
+/// и компилятор создаст для каждого отдельную оптимизированную версию кода.
+fn generate_internal<R: RngCore>(
+    mut rng: R,
     start_id: u64,
     size: u64,
     length: usize,
@@ -23,10 +49,6 @@ pub fn generate_chunk(
 ) -> Vec<u8> {
     // Резервируем память: длина пароля + макс. длина ID (20) + разделители
     let mut buf = Vec::with_capacity(size as usize * (length + 32));
-
-    let mut seed = [0u8; 32];
-    let _ = getrandom::fill(&mut seed);
-    let mut rng = ChaCha8Rng::from_seed(seed);
 
     unsafe {
         let ptr: *mut u8 = buf.as_mut_ptr();
@@ -54,6 +76,7 @@ pub fn generate_chunk(
             if word_mode {
                 for k in 0..length {
                     let random_u32 = rng.next_u32();
+                    // Умножение вместо деления по модулю для скорости и равномерности
                     let idx = ((random_u32 as u64 * WORDLIST.len() as u64) >> 32) as usize;
                     let word = *WORDLIST.get_unchecked(idx);
                     
@@ -73,6 +96,7 @@ pub fn generate_chunk(
                         random_val = rng.next_u64();
                         bits = 64;
                     }
+                    // & 63 — это быстрый остаток от деления на 64
                     *ptr.add(offset) = *CHARSET_FAST.get_unchecked((random_val & 63) as usize);
                     random_val >>= 6;
                     bits -= 6;
@@ -81,6 +105,7 @@ pub fn generate_chunk(
             } else {
                 for _ in 0..length {
                     let mut r = rng.next_u32();
+                    // Отсеивание (Rejection Sampling) для удаления Modulo Bias
                     if r >= CHARSET_LIMIT {
                         loop {
                             r = rng.next_u32();
