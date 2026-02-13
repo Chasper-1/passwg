@@ -1,16 +1,16 @@
-# 🚀 PASSWG: Extreme-Performance SIMD Generator
+# 🚀 PASSWG: Blazing Fast SIMD Generator
 
 [English Description](README.md) | [Описание на русском](README_RU.md)
 
-**PASSWG** is a low-level password generator written in Rust, specifically designed for maximum data throughput on x86_64 architectures using AVX2 instructions.
+**PASSWG** is a low-level password generator written in Rust, engineered to hit the absolute limits of data throughput on x86_64 architectures.
 
-## 🎯 Why is it fast?
+## 🎯 Why is it so fast?
 
-The program ignores standard slow string generation methods and works directly with CPU registers:
+The program bypasses standard, slow string allocation methods and operates directly with CPU registers:
 
-- **AVX2 / SIMD**: Generates and maps 32 symbols per clock cycle using 256-bit vectors.
+- **AVX2 / SIMD**: Generates and maps 32 characters per clock cycle using 256-bit vectors.
     
-- **Lock-Free Parallelism**: Thanks to the `Rayon` library, the workload is distributed across all available cores (P-cores and E-cores) without mutex bottlenecks.
+- **Lock-Free Parallelism**: Powered by the `Rayon` library, the workload is distributed across all available cores (P-cores and E-cores) without mutex bottlenecks.
     
 - **Zero Modulo Bias**: Implements a rejection sampling algorithm to ensure perfect mathematical entropy (~6.52 bits per symbol).
     
@@ -25,26 +25,68 @@ On a budget 4-core CPU, PASSWG delivers:
     
 - **Entropy**: ~130 bits for a 20-character password.
     
-<img src="https://raw.githubusercontent.com/Chasper-1/passwg/main/Screenshots/passwg_bench.png" alt="banner">
 
-## 🛠 Usage
+<details> <summary>View Benchmark Screenshot</summary> <img src="" alt="benchmark"> </details>
 
-`passwg [length/words] [count] [flags] [other options]`
+## 🛠 Features
 
-Example: `passwg 20 1 -w`. The flag `-w` automatically switches the logic from characters to words. You don't need to specify the number of words separately if they are already specified at the beginning.
+- **Three ChaCha Modes**: Choose between ChaCha8, 12, or 20 rounds (`-r`).
+    
+- **Fast Mode (`-f`)**: Maximum optimization for the `[A-Za-z0-0_-]` character set.
+    
+- **Word Mode (`-w`)**: Generates readable phrases.
+    
+- **Output Formats**: Plain text, JSON, CSV.
+    
+- **Clipboard Support**: Direct pipe to Wayland clipboard (`-c`).
+    
 
-Output formats include `--json` or `--csv`. For file output, use `-o <path>`. **IMPORTANT: You must manually add the .json or .csv extension.** Use `-s` for the built-in benchmark.
+## Usage
+
+`passwg [length/words] [count] [flags] [options]`
+
+If you want to generate passwords as words, the logic remains the same: `passwg 20 1 -w`. The flag position is flexible; `passwg -w 20 1` will yield the same result. However, I recommend sticking to the standard syntax shown above. When the `-w` flag is active, the initial arguments automatically switch from character count to word count.
+
+**Output:** You can use `--json` or `--csv` formats, or keep it as plain text. To save to a file, use the `-o` flag followed by the path. If the file doesn't exist, it will be created automatically. **IMPORTANT: You must manually include the .json or .csv extension in the filename.**
+
+**Built-in Benchmark:** Use the `-s` flag to track speed and performance metrics in real-time.
 
 ## ⚙️ Build
 
-```
-RUSTFLAGS="-C target-cpu=native -C opt-level=3" cargo build --release
-```
+<details> <summary>Or use aggressive hardware-specific optimizations:</summary>
+
+_Note: The 2-second benchmark result was achieved using these exact compilation flags._
+
+</details>
 
 ## Important Details
 
-Maximum speed is only achieved in **fast mode** `-f` and when writing to `/dev/null`. No standard SSD can handle ~10 GB/s, and console output is a major bottleneck.
+Maximum speed is strictly achieved in **fast mode** (`-f`). If your generation speed is significantly lower, the bottleneck is likely:
 
-## ⚠️ Disclaimer
+1. Your hardware.
+    
+2. You didn't use the `target-cpu=native` flag during compilation.
+    
+3. You forgot to enable `-f` mode.
+    
 
-The generator was developed with AI assistance. I am not planning to curate or support this project. **Fork it and play with it as you wish.** The project is considered complete as it fulfills its main purpose. All future fixes and features are your responsibility.
+Also, peak throughput was measured while writing to `/dev/null`.
+
+<details> <summary>Why /dev/null?</summary> Because no consumer SSD on Earth can keep up with a 10 GB/s stream. Writing to a disk will throttle the generator. Similarly, printing everything to the console is EXTREMELY slow—don't do it if you're chasing records. </details>
+
+# Heads Up!!!
+
+This generator was heavily assisted by AI during development. For this reason, I am not planning to actively maintain or curate this project. **Fork it, play with it, break it.** I’m sharing this as a tool that I personally needed and as a showcase of what AI-assisted development can achieve.
+
+The project is considered "feature-complete" because it fulfills its primary purpose: generating passwords. Any further polish or features are up to your imagination. If you encounter bugs, you're on your own, though it should work perfectly as-is.
+
+# Additional Info
+
+- If you have questions, feel free to open an issue here; I'll try to reply when possible.
+    
+- This isn't an ad for AI tools. I built this for myself, it turned out solid, so I decided to share.
+    
+- If the code looks "wrong" or "unclean" to you—make it better yourself. It's a ready-to-use base, even if it's not "perfect."
+    
+
+# Over and out!
