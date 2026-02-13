@@ -1,6 +1,6 @@
 # 🚀 PASSWG: Extreme-Performance SIMD Generator
 
-[English Description](README) | [Описание на русском](README_RU)
+[English Description](README.md) | [Описание на русском](README_RU.md)
 
 **PASSWG** is a low-level password generator written in Rust, specifically designed for maximum data throughput on x86_64 architectures using AVX2 instructions.
 

@@ -11,11 +11,11 @@ use std::io::Write;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-const APP_NAME: &str = "PASSWG";
-const VERSION: &str = "2.2.0";
+const APP_NAME: &str = env!("CARGO_PKG_NAME");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // Целевой размер данных в одном чанке — 32 КБ (чтобы влезло в L1d любого ядра)
-const TARGET_L1_SIZE: usize = 256 * 1024;
+const TARGET_L1_SIZE: usize = 32 * 1024;
 
 fn main() -> std::io::Result<()> {
     let locale = i18n::get_locale();
