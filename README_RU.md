@@ -20,7 +20,7 @@
 
 <summary>Изображение</summary>
 
-![[Screenshots/passwg_bench_ru.png]]
+<img src="https://raw.githubusercontent.com/Chasper-1/passwg/main/Screenshots/passwg_bench_ru.png" alt="banner">
 
 </details>
 
