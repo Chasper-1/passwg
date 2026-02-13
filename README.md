@@ -25,6 +25,7 @@ On a budget 4-core CPU, PASSWG delivers:
     
 - **Entropy**: ~130 bits for a 20-character password.
     
+![[passwg_bench.png]]
 
 ## 🛠 Usage
 
