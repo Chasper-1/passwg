@@ -12,7 +12,7 @@ rand_core = "0.9.5"
 rayon = "1.11.0"
 
 [profile.release]
-opt-level = "3"
+opt-level = 3
 lto = true 
 codegen-units = 1
 panic = "abort"
