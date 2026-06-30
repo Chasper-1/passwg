@@ -11,7 +11,7 @@ pub struct Config {
     pub word_mode: bool,
     pub out_file: Option<String>,
     pub format: OutputFormat,
-    pub seed: Option<String>,  // новое поле
+    pub seed: Option<String>,
 }
 
 pub fn parse_args(args: &[String]) -> Config {
@@ -26,7 +26,7 @@ pub fn parse_args(args: &[String]) -> Config {
     let mut format = OutputFormat::Plain;
     let mut nums = Vec::new();
     let mut i = 1;
-    let mut seed = None; // новое
+    let mut seed = None;
 
     while i < args.len() {
         match args[i].as_str() {
@@ -132,7 +132,7 @@ pub fn parse_args(args: &[String]) -> Config {
         word_mode,
         out_file,
         format,
-        seed, // новое поле
+        seed,
     }
 }
 

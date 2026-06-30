@@ -5,7 +5,7 @@ use crate::writer::OutputFormat;
 use blake3::hash;
 use rand_chacha::{ChaCha8Rng, ChaCha12Rng, ChaCha20Rng};
 use rand_core::{RngCore, SeedableRng};
-use std::time::Instant; // новое
+use std::time::Instant;
 
 pub const CHARSET: &[u8] =
     b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&'()*+,-./:;<=>?@[]^_`{|}~";
@@ -71,7 +71,6 @@ pub fn generate_chunk(
     }
 }
 
-// generate_internal – полностью без изменений (оригинал)
 fn generate_internal<R: RngCore>(
     mut rng: R,
     start_id: u64,
@@ -198,7 +197,6 @@ fn generate_internal<R: RngCore>(
     buf
 }
 
-// остальные функции без изменений
 #[inline(always)]
 unsafe fn fast_write_u64_ptr(ptr: *mut u8, mut n: u64) -> usize {
     static TABLE: &[u8] = b"0001020304050607080910111213141516171819\

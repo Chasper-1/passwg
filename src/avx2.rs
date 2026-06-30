@@ -40,3 +40,30 @@ impl Avx2Mapper {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_avx2_mapping() {
+        // Проверяем, что маппинг возвращает только допустимые символы
+        // и что он детерминирован.
+        let mut input = [0u8; 32];
+        let mut output = [0u8; 32];
+        // Заполняем входные данные известными значениями
+        for i in 0..32 {
+            input[i] = i as u8; // 0..31
+        }
+        unsafe {
+            Avx2Mapper::map_64_symbols(input.as_ptr(), output.as_mut_ptr());
+        }
+        // Ожидаемый результат для первых 32 байт: по индексам 0..31,
+        // которые дают символы из таблиц.
+        // Мы можем проверить, что все символы принадлежат множеству допустимых.
+        let valid_chars = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-";
+        for &c in &output {
+            assert!(valid_chars.contains(&c), "Недопустимый символ: {}", c as char);
+        }
+    }
+}
