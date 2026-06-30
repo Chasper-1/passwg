@@ -21,7 +21,7 @@ On a budget 4-core CPU, PASSWG delivers:
 
 - **Speed**: ~510,000,000 passwords/sec (20 chars).
     
-- **Throughput**: ~10.2+ GB/s (RAM/Bus bottleneck).
+- **Throughput**: ~10.2+ GB/s.
     
 - **Entropy**: ~130 bits for a 20-character password.
     
