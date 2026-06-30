@@ -38,7 +38,7 @@ On a budget 4-core CPU, PASSWG delivers:
 
 - **Three ChaCha Modes**: Choose between ChaCha8, 12, or 20 rounds (`-r`).
     
-- **Fast Mode (`-f`)**: Maximum optimization for the `[A-Za-z0-0_-]` character set.
+- **Fast Mode (`-f`)**: Maximum optimization for the `[A-Za-z0-9_-]` character set.
     
 - **Word Mode (`-w`)**: Generates readable phrases.
     
@@ -46,7 +46,7 @@ On a budget 4-core CPU, PASSWG delivers:
   
 - **Clipboard Support**: Direct pipe to Wayland clipboard (`-c`).
 
-- **Seed mode**: Allows you to enter the seed yourself, in order, for example, to implement password storage through deterministic generation.
+- **Seed mode**: (`Allows you to enter the seed yourself`), in order, for example, to implement password storage through deterministic generation.
     
 
 ## Usage
