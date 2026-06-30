@@ -13,7 +13,6 @@ use std::time::Instant;
 
 const APP_NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-
 const TARGET_L1_SIZE: usize = 32 * 1024;
 
 fn main() -> std::io::Result<()> {
@@ -70,7 +69,7 @@ fn main() -> std::io::Result<()> {
             config.word_mode,
             config.format,
             config.rounds,
-            config.seed.clone(),
+            config.seed.clone(), // новое
         );
 
         if config.copy_mode && start_id == 1 {

@@ -5,7 +5,7 @@ use crate::writer::OutputFormat;
 use blake3::hash;
 use rand_chacha::{ChaCha8Rng, ChaCha12Rng, ChaCha20Rng};
 use rand_core::{RngCore, SeedableRng};
-use std::time::Instant;
+use std::time::Instant; // новое
 
 pub const CHARSET: &[u8] =
     b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&'()*+,-./:;<=>?@[]^_`{|}~";
@@ -14,11 +14,13 @@ pub const CHARSET_FAST: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst
 
 const CHARSET_LIMIT: u32 = (u32::MAX / CHARSET_LEN as u32) * CHARSET_LEN as u32;
 
+// новая функция
 fn derive_seed_from_string(input: &str) -> [u8; 32] {
     let h = hash(input.as_bytes());
     *h.as_bytes()
 }
 
+// изменённая сигнатура и тело
 pub fn generate_chunk(
     start_id: u64,
     size: u64,
@@ -27,7 +29,7 @@ pub fn generate_chunk(
     word_mode: bool,
     format: OutputFormat,
     rounds: u8,
-    seed: Option<String>,
+    seed: Option<String>, // новый параметр
 ) -> Vec<u8> {
     let seed_bytes: [u8; 32] = match seed {
         Some(s) => derive_seed_from_string(&s),
@@ -69,6 +71,7 @@ pub fn generate_chunk(
     }
 }
 
+// generate_internal – полностью без изменений (оригинал)
 fn generate_internal<R: RngCore>(
     mut rng: R,
     start_id: u64,
@@ -195,6 +198,7 @@ fn generate_internal<R: RngCore>(
     buf
 }
 
+// остальные функции без изменений
 #[inline(always)]
 unsafe fn fast_write_u64_ptr(ptr: *mut u8, mut n: u64) -> usize {
     static TABLE: &[u8] = b"0001020304050607080910111213141516171819\
@@ -258,6 +262,7 @@ pub fn print_report(start: Instant, count: u64, _length: usize, l: &I18n) {
     }
 }
 
+// тесты
 #[cfg(test)]
 mod tests {
     use super::*;

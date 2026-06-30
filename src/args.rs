@@ -11,7 +11,7 @@ pub struct Config {
     pub word_mode: bool,
     pub out_file: Option<String>,
     pub format: OutputFormat,
-    pub seed: Option<String>,
+    pub seed: Option<String>,  // новое поле
 }
 
 pub fn parse_args(args: &[String]) -> Config {
@@ -26,7 +26,7 @@ pub fn parse_args(args: &[String]) -> Config {
     let mut format = OutputFormat::Plain;
     let mut nums = Vec::new();
     let mut i = 1;
-    let mut seed = None;
+    let mut seed = None; // новое
 
     while i < args.len() {
         match args[i].as_str() {
@@ -47,7 +47,6 @@ pub fn parse_args(args: &[String]) -> Config {
                     i += 1;
                 } else {
                     eprintln!("Ошибка: флаг -o требует указания имени файла");
-                    eprintln!("Пример: passwg -o passwords.txt");
                     std::process::exit(1);
                 }
             }
@@ -62,18 +61,16 @@ pub fn parse_args(args: &[String]) -> Config {
                             i += 1;
                         }
                         _ => {
-                            eprintln!(
-                                "Ошибка: неверное количество раундов. Допустимо только: 8, 12, 20"
-                            );
+                            eprintln!("Ошибка: неверное количество раундов. Допустимо: 8, 12, 20");
                             std::process::exit(1);
                         }
                     }
                 } else {
-                    eprintln!("Ошибка: флаг -r требует указания числа (8, 12, 20)");
+                    eprintln!("Ошибка: флаг -r требует числа (8, 12, 20)");
                     std::process::exit(1);
                 }
             }
-            "-S" | "--seed" => {
+            "-S" | "--seed" => {   // новый флаг
                 if i + 1 < args.len() {
                     seed = Some(args[i + 1].clone());
                     i += 1;
@@ -84,7 +81,7 @@ pub fn parse_args(args: &[String]) -> Config {
             }
             arg if arg.starts_with('-') => {
                 eprintln!("Ошибка: неизвестный флаг '{}'", arg);
-                eprintln!("Используйте -h для просмотра доступных флагов");
+                eprintln!("Используйте -h для справки");
                 std::process::exit(1);
             }
             _ => {
@@ -92,8 +89,6 @@ pub fn parse_args(args: &[String]) -> Config {
                     nums.push(n);
                 } else {
                     eprintln!("Ошибка: неверный аргумент '{}'", args[i]);
-                    eprintln!("Аргументы должны быть числами или флагами");
-                    eprintln!("Пример: passwg 20 5 -s");
                     std::process::exit(1);
                 }
             }
@@ -101,17 +96,14 @@ pub fn parse_args(args: &[String]) -> Config {
         i += 1;
     }
 
+    // остальные проверки без изменений
     if copy_mode && out_file.is_some() {
-        eprintln!("Предупреждение: флаг -c (копирование) игнорируется при использовании -o (файл)");
+        eprintln!("Предупреждение: -c игнорируется при -o");
         copy_mode = false;
     }
-
     if fast_mode && word_mode {
-        eprintln!(
-            "Предупреждение: флаг -f (быстрый режим) игнорируется при использовании -w (слова)"
-        );
+        eprintln!("Предупреждение: -f игнорируется при -w");
     }
-
     if let Some(&l) = nums.get(0) {
         if l == 0 {
             eprintln!("Ошибка: длина не может быть 0");
@@ -119,7 +111,6 @@ pub fn parse_args(args: &[String]) -> Config {
         }
         length = l as usize;
     }
-
     if let Some(&c) = nums.get(1) {
         if c == 0 {
             eprintln!("Ошибка: количество не может быть 0");
@@ -127,13 +118,8 @@ pub fn parse_args(args: &[String]) -> Config {
         }
         count = c;
     }
-
     if word_mode && length > 20 {
-        eprintln!(
-            "Предупреждение: количество слов слишком большое ({})",
-            length
-        );
-        eprintln!("Рекомендуется не более 10 слов для удобства");
+        eprintln!("Предупреждение: слишком много слов ({})", length);
     }
 
     Config {
@@ -146,7 +132,7 @@ pub fn parse_args(args: &[String]) -> Config {
         word_mode,
         out_file,
         format,
-        seed,
+        seed, // новое поле
     }
 }
 
@@ -172,6 +158,6 @@ pub fn print_help(l: &I18n, app_name: &str, version: &str) {
     println!("{}", l.help_fast);
     println!("{}", l.help_copy);
     println!("{}", l.help_rounds);
-    println!("  -S, --seed     Детерминированный режим (одинаковый seed → одинаковый пароль)");
+    println!("  -S, --seed     Детерминированный режим (любая строка)");
     println!("{}", l.help_h);
 }
