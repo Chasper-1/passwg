@@ -12,15 +12,15 @@
 
 ## 📊 Бенчмарки (Intel i3-12100f)
 На бюджетном 4-ядерном процессоре PASSWG выдает следующие показатели:
-- **Скорость**: ~485 000 000 паролей/сек (20 симв.)
-- **Пропускная способность**: ~10.2 ГБ/сек
+- **Скорость**: ~510 000 000 паролей/сек (20 симв.)
+- **Пропускная способность**: ~10.2+ ГБ/сек
 - **Энтропия**: ~130 бит для 20-символьного пароля.
 
 <details>
 
-<summary>Изображение</summary>
+<summary>Изображение бенчмарка</summary>
 
-<img src="https://raw.githubusercontent.com/Chasper-1/passwg/main/Screenshots/passwg_bench_ru.png" alt="banner">
+<img src="https://raw.githubusercontent.com/Chasper-1/passwg/main/Screenshots/passwg_bench_ru_new.png" alt="banner">
 
 </details>
 

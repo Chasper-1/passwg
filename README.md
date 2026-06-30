@@ -19,14 +19,20 @@ The program bypasses standard, slow string allocation methods and operates direc
 
 On a budget 4-core CPU, PASSWG delivers:
 
-- **Speed**: ~485,000,000 passwords/sec (20 chars).
+- **Speed**: ~510,000,000 passwords/sec (20 chars).
     
-- **Throughput**: ~10.2 GB/s (RAM/Bus bottleneck).
+- **Throughput**: ~10.2+ GB/s (RAM/Bus bottleneck).
     
 - **Entropy**: ~130 bits for a 20-character password.
     
 
-<details> <summary>View Benchmark Screenshot</summary> <img src="" alt="benchmark"> </details>
+<details>
+
+<summary>Image Benchmark</summary>
+
+<img src="https://raw.githubusercontent.com/Chasper-1/passwg/main/Screenshots/passwg_bench_new.png" alt="banner">
+
+</details>
 
 ## 🛠 Features
 
