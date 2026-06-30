@@ -37,8 +37,10 @@ On a budget 4-core CPU, PASSWG delivers:
 - **Word Mode (`-w`)**: Generates readable phrases.
     
 - **Output Formats**: Plain text, JSON, CSV.
-    
+  
 - **Clipboard Support**: Direct pipe to Wayland clipboard (`-c`).
+
+- **Seed mode**: Allows you to enter the seed yourself, in order, for example, to implement password storage through deterministic generation.
     
 
 ## Usage
