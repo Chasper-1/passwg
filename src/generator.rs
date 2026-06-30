@@ -2,7 +2,7 @@
 use crate::i18n::I18n;
 use crate::words::WORDLIST;
 use crate::writer::OutputFormat;
-// Импортируем все варианты ChaCha
+use blake3::hash;
 use rand_chacha::{ChaCha8Rng, ChaCha12Rng, ChaCha20Rng};
 use rand_core::{RngCore, SeedableRng};
 use std::time::Instant;
@@ -14,7 +14,11 @@ pub const CHARSET_FAST: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst
 
 const CHARSET_LIMIT: u32 = (u32::MAX / CHARSET_LEN as u32) * CHARSET_LEN as u32;
 
-/// Публичная точка входа. Выбирает алгоритм на основе rounds и вызывает generic-функцию.
+fn derive_seed_from_string(input: &str) -> [u8; 32] {
+    let h = hash(input.as_bytes());
+    *h.as_bytes()
+}
+
 pub fn generate_chunk(
     start_id: u64,
     size: u64,
@@ -22,15 +26,21 @@ pub fn generate_chunk(
     fast_mode: bool,
     word_mode: bool,
     format: OutputFormat,
-    rounds: u8, // Новый параметр
+    rounds: u8,
+    seed: Option<String>,
 ) -> Vec<u8> {
-    let mut seed = [0u8; 32];
-    // Используем системную энтропию для инициализации
-    let _ = getrandom::fill(&mut seed);
+    let seed_bytes: [u8; 32] = match seed {
+        Some(s) => derive_seed_from_string(&s),
+        None => {
+            let mut s = [0u8; 32];
+            let _ = getrandom::fill(&mut s);
+            s
+        }
+    };
 
     match rounds {
         12 => generate_internal(
-            ChaCha12Rng::from_seed(seed),
+            ChaCha12Rng::from_seed(seed_bytes),
             start_id,
             size,
             length,
@@ -39,7 +49,7 @@ pub fn generate_chunk(
             format,
         ),
         20 => generate_internal(
-            ChaCha20Rng::from_seed(seed),
+            ChaCha20Rng::from_seed(seed_bytes),
             start_id,
             size,
             length,
@@ -48,7 +58,7 @@ pub fn generate_chunk(
             format,
         ),
         _ => generate_internal(
-            ChaCha8Rng::from_seed(seed),
+            ChaCha8Rng::from_seed(seed_bytes),
             start_id,
             size,
             length,
@@ -59,9 +69,6 @@ pub fn generate_chunk(
     }
 }
 
-/// Внутренняя функция с логикой генерации.
-/// <R: RngCore> означает, что она принимает любой генератор (8, 12 или 20 раундов),
-/// и компилятор создаст для каждого отдельную оптимизированную версию кода.
 fn generate_internal<R: RngCore>(
     mut rng: R,
     start_id: u64,
@@ -71,7 +78,6 @@ fn generate_internal<R: RngCore>(
     word_mode: bool,
     format: OutputFormat,
 ) -> Vec<u8> {
-    // Резервируем память: длина пароля + макс. длина ID (20) + разделители
     let mut buf = Vec::with_capacity(size as usize * (length + 32));
 
     unsafe {
@@ -81,7 +87,6 @@ fn generate_internal<R: RngCore>(
         for i in 0..size {
             let current_id = start_id + i;
 
-            // 1. ПРЕФИКСЫ ФОРМАТА
             match format {
                 OutputFormat::Csv => {
                     offset += fast_write_u64_ptr(ptr.add(offset), current_id);
@@ -96,11 +101,9 @@ fn generate_internal<R: RngCore>(
                 _ => {}
             }
 
-            // 2. ГЕНЕРАЦИЯ КОНТЕНТА
             if word_mode {
                 for k in 0..length {
                     let random_u32 = rng.next_u32();
-                    // Умножение вместо деления по модулю для скорости и равномерности
                     let idx = ((random_u32 as u64 * WORDLIST.len() as u64) >> 32) as usize;
                     let word = *WORDLIST.get_unchecked(idx);
 
@@ -121,7 +124,6 @@ fn generate_internal<R: RngCore>(
                     let mut rand_buf = [0u8; 32];
                     for _ in 0..chunks_32 {
                         rng.fill_bytes(&mut rand_buf);
-                        // Убрал лишний unsafe внутри, так как мы уже в unsafe контексте
                         crate::avx2::Avx2Mapper::map_64_symbols(rand_buf.as_ptr(), ptr.add(offset));
                         offset += 32;
                         current_len -= 32;
@@ -167,7 +169,6 @@ fn generate_internal<R: RngCore>(
             } else {
                 for _ in 0..length {
                     let mut r = rng.next_u32();
-                    // Отсеивание (Rejection Sampling) для удаления Modulo Bias
                     if r >= CHARSET_LIMIT {
                         loop {
                             r = rng.next_u32();
@@ -181,7 +182,6 @@ fn generate_internal<R: RngCore>(
                 }
             }
 
-            // 3. ПОСТФИКСЫ
             if format == OutputFormat::Json {
                 *ptr.add(offset) = b'\"';
                 offset += 1;
@@ -195,7 +195,6 @@ fn generate_internal<R: RngCore>(
     buf
 }
 
-/// Супер-быстрая запись u64 через таблицу предзаписанных пар цифр
 #[inline(always)]
 unsafe fn fast_write_u64_ptr(ptr: *mut u8, mut n: u64) -> usize {
     static TABLE: &[u8] = b"0001020304050607080910111213141516171819\
@@ -256,5 +255,60 @@ pub fn print_report(start: Instant, count: u64, _length: usize, l: &I18n) {
         eprintln!("{}: {:.4} s", l.stat_time, dur);
         eprintln!("{}: {:.2} p/s", l.stat_speed, speed);
         eprintln!("{}: {:.2} Mp/s", l.stat_perf, speed / 1_000_000.0);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::writer::OutputFormat;
+
+    #[test]
+    fn deterministic_seed_identity() {
+        let seed = "abc".to_string();
+        let r1 = generate_chunk(
+            1,
+            1,
+            16,
+            false,
+            false,
+            OutputFormat::Plain,
+            8,
+            Some(seed.clone()),
+        );
+        let r2 = generate_chunk(1, 1, 16, false, false, OutputFormat::Plain, 8, Some(seed));
+        assert_eq!(r1, r2);
+    }
+
+    #[test]
+    fn deterministic_seed_different() {
+        let r1 = generate_chunk(
+            1,
+            1,
+            16,
+            false,
+            false,
+            OutputFormat::Plain,
+            8,
+            Some("a".to_string()),
+        );
+        let r2 = generate_chunk(
+            1,
+            1,
+            16,
+            false,
+            false,
+            OutputFormat::Plain,
+            8,
+            Some("b".to_string()),
+        );
+        assert_ne!(r1, r2);
+    }
+
+    #[test]
+    fn random_mode_not_equal() {
+        let r1 = generate_chunk(1, 1, 16, false, false, OutputFormat::Plain, 8, None);
+        let r2 = generate_chunk(1, 1, 16, false, false, OutputFormat::Plain, 8, None);
+        assert_ne!(r1, r2);
     }
 }

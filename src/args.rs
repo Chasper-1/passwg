@@ -11,6 +11,7 @@ pub struct Config {
     pub word_mode: bool,
     pub out_file: Option<String>,
     pub format: OutputFormat,
+    pub seed: Option<String>,
 }
 
 pub fn parse_args(args: &[String]) -> Config {
@@ -25,6 +26,7 @@ pub fn parse_args(args: &[String]) -> Config {
     let mut format = OutputFormat::Plain;
     let mut nums = Vec::new();
     let mut i = 1;
+    let mut seed = None;
 
     while i < args.len() {
         match args[i].as_str() {
@@ -35,7 +37,7 @@ pub fn parse_args(args: &[String]) -> Config {
                 word_mode = true;
                 if length == 16 {
                     length = 4;
-                } // Дефолт для фраз — 4 слова
+                }
             }
             "--json" => format = OutputFormat::Json,
             "--csv" => format = OutputFormat::Csv,
@@ -50,7 +52,6 @@ pub fn parse_args(args: &[String]) -> Config {
                 }
             }
             "-h" | "--help" => {
-                // help уже обработан в main, но на всякий случай
                 std::process::exit(0);
             }
             "-r" | "--rounds" => {
@@ -72,8 +73,16 @@ pub fn parse_args(args: &[String]) -> Config {
                     std::process::exit(1);
                 }
             }
+            "-S" | "--seed" => {
+                if i + 1 < args.len() {
+                    seed = Some(args[i + 1].clone());
+                    i += 1;
+                } else {
+                    eprintln!("Ошибка: флаг -S или --seed требует аргумента");
+                    std::process::exit(1);
+                }
+            }
             arg if arg.starts_with('-') => {
-                // Неизвестный флаг
                 eprintln!("Ошибка: неизвестный флаг '{}'", arg);
                 eprintln!("Используйте -h для просмотра доступных флагов");
                 std::process::exit(1);
@@ -92,7 +101,6 @@ pub fn parse_args(args: &[String]) -> Config {
         i += 1;
     }
 
-    // Проверяем конфликт флагов
     if copy_mode && out_file.is_some() {
         eprintln!("Предупреждение: флаг -c (копирование) игнорируется при использовании -o (файл)");
         copy_mode = false;
@@ -120,7 +128,6 @@ pub fn parse_args(args: &[String]) -> Config {
         count = c;
     }
 
-    // Если включен режим слов, проверяем длину
     if word_mode && length > 20 {
         eprintln!(
             "Предупреждение: количество слов слишком большое ({})",
@@ -139,6 +146,7 @@ pub fn parse_args(args: &[String]) -> Config {
         word_mode,
         out_file,
         format,
+        seed,
     }
 }
 
@@ -164,5 +172,6 @@ pub fn print_help(l: &I18n, app_name: &str, version: &str) {
     println!("{}", l.help_fast);
     println!("{}", l.help_copy);
     println!("{}", l.help_rounds);
+    println!("  -S, --seed     Детерминированный режим (одинаковый seed → одинаковый пароль)");
     println!("{}", l.help_h);
 }

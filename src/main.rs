@@ -1,9 +1,9 @@
 mod args;
+mod avx2;
 mod generator;
 mod i18n;
 mod words;
 mod writer;
-mod avx2;
 
 use crate::writer::OutputFormat;
 use rayon::prelude::*;
@@ -14,7 +14,6 @@ use std::time::Instant;
 const APP_NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-// Целевой размер данных в одном чанке — 32 КБ (чтобы влезло в L1d любого ядра)
 const TARGET_L1_SIZE: usize = 32 * 1024;
 
 fn main() -> std::io::Result<()> {
@@ -31,8 +30,6 @@ fn main() -> std::io::Result<()> {
         return Ok(());
     }
 
-    // АВТОКОРРЕКЦИЯ: Вычисляем размер чанка на лету
-    // Примерный размер одного пароля: длина + ID (до 20) + разделители
     let bytes_per_pass = config.length + 20;
     let chunk_size = (TARGET_L1_SIZE / bytes_per_pass).clamp(32, 16384) as u64;
 
@@ -72,7 +69,8 @@ fn main() -> std::io::Result<()> {
             config.fast_mode,
             config.word_mode,
             config.format,
-            config.rounds
+            config.rounds,
+            config.seed.clone(),
         );
 
         if config.copy_mode && start_id == 1 {

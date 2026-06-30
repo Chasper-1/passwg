@@ -1,10 +1,11 @@
 [package]
 name = "passwg"
-version = "1.7.2"
+version = "1.7.3"
 edition = "2024"
 
 [dependencies]
 arboard = "3.6.1"
+blake3 = "1.8.5"
 getrandom = "0.3.4"
 itoa = "1.0.17"
 rand_chacha = "0.9.0"
