@@ -61,7 +61,12 @@ If you want to generate passwords as words, the logic remains the same: `passwg 
 
 ## ⚙️ Build
 
-<details> <summary>Or use aggressive hardware-specific optimizations:</summary>
+<details>
+<summary>Or use aggressive hardware-specific optimizations:</summary>
+
+```bash
+RUSTFLAGS="-C target-cpu=native" cargo b -r
+```
 
 _Note: The 2-second benchmark result was achieved using these exact compilation flags._
 
@@ -80,7 +85,13 @@ Maximum speed is strictly achieved in **fast mode** (`-f`). If your generation s
 
 Also, peak throughput was measured while writing to `/dev/null`.
 
-<details> <summary>Why /dev/null?</summary> Because no consumer SSD on Earth can keep up with a 10 GB/s stream. Writing to a disk will throttle the generator. Similarly, printing everything to the console is EXTREMELY slow—don't do it if you're chasing records. </details>
+<details>
+<summary>Why /dev/null?</summary>
+Because no consumer SSD on Earth can keep up with a 10 GB/s stream. Writing to a disk will throttle the generator.
+
+Similarly, printing everything to the console is EXTREMELY slow—don't do it if you're chasing records.
+
+</details>
 
 # Heads Up!!!
 
@@ -96,5 +107,4 @@ The project is considered "feature-complete" because it fulfills its primary pur
     
 - If the code looks "wrong" or "unclean" to you—make it better yourself. It's a ready-to-use base, even if it's not "perfect."
     
-
 # Over and out!
