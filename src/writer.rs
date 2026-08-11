@@ -4,8 +4,8 @@ use std::io::{self, BufWriter, Write};
 #[derive(PartialEq, Clone, Copy)]
 pub enum OutputFormat { Plain, Json, Csv }
 
-/// Создает буферизированный поток вывода.
-/// 1MB для stdout и 32MB для файла, чтобы реже дергать диск.
+// Создает буферизированный поток вывода.
+// 1MB для stdout и 32MB для файла, чтобы реже дергать диск.
 pub fn get_writer(out_file: &Option<String>) -> io::Result<Box<dyn Write + Send>> {
     if let Some(path) = out_file {
         let file = File::create(path)?;
